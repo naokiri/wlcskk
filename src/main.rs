@@ -1,29 +1,22 @@
+mod app_config;
 mod wl_cskk_context;
 
 use clap::Parser;
-use cskk::CskkContext;
 use log;
 use mio::unix::SourceFd;
 use mio::{Events, Interest, Poll, Token};
 use signal_hook::consts::{SIGINT, SIGTERM};
 use signal_hook_mio::v0_8::Signals;
 use std::io::ErrorKind;
-use std::time::Duration;
 use wayland_client::{
-    protocol::{wl_keyboard::KeyState, wl_seat::WlSeat},
-    DispatchData, Display, Filter, GlobalManager, Main,
+    protocol::wl_seat::WlSeat,
+    DispatchData, Display, GlobalManager, Main,
 };
-use wayland_protocols::misc::zwp_input_method_v2;
-use wayland_protocols::misc::zwp_input_method_v2::client::zwp_input_method_keyboard_grab_v2::Event as KeyEvent;
-use wayland_protocols::misc::zwp_input_method_v2::client::zwp_input_method_keyboard_grab_v2::ZwpInputMethodKeyboardGrabV2;
 use wayland_protocols::misc::zwp_input_method_v2::client::zwp_input_method_manager_v2::ZwpInputMethodManagerV2;
 use wayland_protocols::misc::zwp_input_method_v2::client::zwp_input_method_v2::Event as IMEvent;
 use wayland_protocols::misc::zwp_input_method_v2::client::zwp_input_method_v2::ZwpInputMethodV2;
 use wl_cskk_context::WlCskkContext;
-use zwp_virtual_keyboard::virtual_keyboard_unstable_v1::{
-    zwp_virtual_keyboard_manager_v1::ZwpVirtualKeyboardManagerV1,
-    zwp_virtual_keyboard_v1::ZwpVirtualKeyboardV1,
-};
+use zwp_virtual_keyboard::virtual_keyboard_unstable_v1::zwp_virtual_keyboard_manager_v1::ZwpVirtualKeyboardManagerV1;
 
 /// wayland input protocol based skk input method
 #[derive(Parser, Debug)]
@@ -35,6 +28,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut signals = Signals::new(&[SIGINT, SIGTERM])?;
 
     let _args = Args::parse();
+
+    let app_config = confy::load(clap::crate_name!())?;
+    confy::store(clap::crate_name!(), &app_config)?;
 
     let display = Display::connect_to_env().expect("Failed to connect wayland display");
     let mut event_queue = display.create_event_queue();
@@ -59,26 +55,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .instantiate_exact::<ZwpInputMethodManagerV2>(1)
         .expect("Load InputManager");
     let im = im_manager.get_input_method(&seat);
-    log::debug!("Grabbing keyboard");
-    let grab = im.grab_keyboard();
 
-    // Handle events using the filters
-    grab.quick_assign(
-        |handle: Main<ZwpInputMethodKeyboardGrabV2>, ev: KeyEvent, mut data: DispatchData| {
-            let context = WlCskkContext::from_wayland_data(&mut data);
-            context.handle_key_ev(ev)
-        },
-    );
     im.quick_assign(
-        |handle: Main<ZwpInputMethodV2>, ev: IMEvent, mut data: DispatchData| {
+        |_handle: Main<ZwpInputMethodV2>, ev: IMEvent, mut data: DispatchData| {
             let context = WlCskkContext::from_wayland_data(&mut data);
             context.handle_im_ev(ev)
         },
     );
 
-    let mut context = WlCskkContext::new(vk, im);
+    let mut context = WlCskkContext::new(vk, im, app_config)?;
     if let Err(e) =
-    event_queue.sync_roundtrip(&mut context, |_, _, _| log::debug!("Unhandled event"))
+        event_queue.sync_roundtrip(&mut context, |_, _, _| log::debug!("Unhandled event"))
     {
         if let Some(protocol_error) = &display.protocol_error() {
             log::error!("Error on use of wayland protocol: {:?}", protocol_error);

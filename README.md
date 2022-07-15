@@ -1,10 +1,24 @@
 # WLCSKK
-Wayland text input daemon that implements ZwpInputMethodV2 and ZwpVirtualKeyboardV1.
+Wayland text input daemon that implements Wayland ZwpInputMethodV2 and ZwpVirtualKeyboardV1 partially. 
+
+Targetting to use under swaywm, aiming to follow the wlroot applicable protocols.
+
+Note that those protocols are unstable yet.
 
 ## Current Status
-Under development.
+Works, buggy.
 
-Works as a daemon, and does no composition, just delegate all keys to virtual keyboard.
+## How to try
+First, stop all other daemons that grabs keyboard. 
+
+Then, run 
+
+    $ cargo run
+
+Once you run this daemon, default config file will be generated and you can specify the skk dictionary files.
+Config file defaults to `~/.config/wlcskk/wlcskk.toml`
+
+    $ RUST_LOG=debug cargo run 2> error.txt 
 
 ## Copyright
 
